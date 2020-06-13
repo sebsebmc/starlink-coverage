@@ -1,7 +1,7 @@
 # Goals:
 
 1. % of day covered
-2. Average coverage (satellite multiplicity)
+2. Average coverage (factoring the number of satellites covering a location)
 
 ## Implementation
 
@@ -32,9 +32,32 @@ on an equi-rectangular projection.
 
 ## Resolution
 
-2 options:
+2 options for spatial resolution in my head originally:
 2048*1024 = 2,097,152
 4096*2048 = 8,388,608‬
+
+Instead of trying to use a 2d array to represent the footprints and dealing with the spherical nature
+of the Earth, I am instead going to try and use S2 level 9 cells to track coverage. According to the
+statistics page of the S2 library, this is about 1537000 cells, so I would need about 12MB of data to
+track the whole Earth. Each cell covers 324.29km^2 on average.
+
+For temporal resolution:
+These satellites move across a location quite quickly, using a website like https://findstarlink.com
+we can find that a whole "train" of Starlink satellites crosses a locations view in about 4 or 5 minutes
+so our temporal resolution needs to be a minute if not faster if we want accurate results. 
+
+## S2 based approach
+
+```
+for each time step:
+    for each sat:
+        calculate footprint
+        get cells to cover footprint
+        for each cell:
+            increment counter
+```
+
+This means we only have to iterate over ~2200 cells per satellite instead of ~2 million points each.
 
 ## Used constants
 
@@ -51,9 +74,6 @@ the starlink satellites already in space are elevating or are at 550 km
 Stralink TLE's
 https://celestrak.com/NORAD/elements/starlink.txt
 
-## Remaining questions
-
-Does
 
 ### References
 

@@ -67,6 +67,11 @@ issues of latitude and longitude meaning different distances at the equator vs t
 In the end for plotting, if we used the cell vertices as plotting locations we would cover the whole
 globe and not oversample at the poles or undersample at the equator.
 
+## S2, more like 2 slow... An H3 approach
+So S2 was just being way to slow to return cells for a given covering. (90s to simulate one timestep)
+Now I have to make some guesses about projections for H3 and but it is ~4.5 times faster to simulate 
+a timestep than S2 (now takes 20 seconds on my machine). I'm gonna proceed with the H3 approach for
+now.
 
 ## Used constants
 

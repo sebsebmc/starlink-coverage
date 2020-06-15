@@ -4,18 +4,24 @@ from skyfield import api
 from skyfield.api import Loader
 
 import math
+import json 
+
 from typing import List, Dict
 
 import s2sphere
 
+import numpy as np
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.io.img_tiles as cimgt
+import shapely.geometry
 from shapely.geometry import Polygon
-
+import geog
+import h3
 
 TLE_URL = 'https://celestrak.com/NORAD/elements/starlink.txt'
 R_MEAN = 6378.1 #km
+H3_RESOLUTION_LEVEL = 5
 
 def to_deg(radians: float) -> float:
     return radians * (180 / math.pi)
@@ -44,6 +50,7 @@ def calcAreaSpherical(altitude: float, term_angle:float) -> float:
 
     return area
 
+# Returns the cap angle (lambda_FOV/2) in radians
 def calcCapAngle(altitude: float, term_angle: float) -> float:
     epsilon = to_rads(term_angle)
 
@@ -51,7 +58,7 @@ def calcCapAngle(altitude: float, term_angle: float) -> float:
 
     lambda_FOV = 2 * (math.pi - (epsilon + RIGHT_ANGLE + eta_FOV))
 
-    area = 2 * math.pi * (R_MEAN ** 2) * ( 1 - math.cos(lambda_FOV / 2))
+    # area = 2 * math.pi * (R_MEAN ** 2) * ( 1 - math.cos(lambda_FOV / 2))
 
     return (lambda_FOV / 2)
 
@@ -97,7 +104,27 @@ def plotFootprint(sat):
                 alpha=0.7, transform=ccrs.Geodetic())
     plt.savefig('test.png')
 
-# area = calcAreaSpherical(340, 35)
+def get_cell_ids_h3(lat:float, lng:float, angle: float) -> List: 
+    p = shapely.geometry.Point([lng, lat])
+    # so to more accurately match projections maybe arc length of a sphere woulde be best?
+    arc_length = R_MEAN * angle # in km
+
+    n_points = 20
+    #arc_length should be the radius in kilometers so convert to diameter in meters
+    d = arc_length * 1000 # meters
+    angles = np.linspace(0, 360, n_points)
+    polygon = geog.propagate(p, angles, d)
+    mapping = shapely.geometry.mapping(shapely.geometry.Polygon(polygon))
+    # print(json.dumps(mapping, indent=2))
+
+    cells = h3.polyfill(mapping, 5, True)
+    
+    return cells
+
+def plotFootprintH3(sat):
+    angle = calcCapAngle(sat.elevation.km, 35)
+    cells = get_cell_ids_h3(sat.latitude.degrees, sat.longitude.degrees, angle)
+    print(len(list(cells)))
 
 sats = load_sats()
 print(f"Loaded {len(sats)} satellites")
@@ -108,9 +135,13 @@ now = ts.now()
 # now = ts.tt_jd(2459013.763217299)
 subpoints = {sat.name : sat.at(now).subpoint() for sat in sats}
 
-# sat1 = subpoints['STARLINK-1439']
-# print(f"center: {sat1.latitude.degrees}, {sat1.longitude.degrees} angle: {angle}")
-# plotFootprint(sat1)
+sat1 = subpoints['STARLINK-1439']
+angle = calcCapAngle(sat1.elevation.km, 35)
+print(f"center: {sat1.latitude.degrees}, {sat1.longitude.degrees} angle: {angle}")
+#plotFootprint(sat1)
+#plotFootprintH3(sat1)
+
+#exit()
 
 # Can I specify the whole sphere to S2? Docs say an angle >= 180 is the whole sphere
 # region = s2sphere.Cap.from_axis_angle(s2sphere.LatLng.from_degrees(0,0).to_point(), s2sphere.Angle.from_degrees(181))
@@ -128,10 +159,13 @@ def readTokens():
             # cell_id = s2sphere.CellId.from_token(tok)
             coverage[tok] = 0
 
-readTokens()
+#readTokens()
 for _, sat in subpoints.items():
     angle = calcCapAngle(sat.elevation.km, 35)
-    cells = get_cell_ids(sat.latitude.degrees, sat.longitude.degrees, angle)
-    for cellid in cells:
-        coverage[cellid.to_token()] += 1
+    cells = get_cell_ids_h3(sat.latitude.degrees, sat.longitude.degrees, angle)
+    if len(cells) == 0:
+        Exception("empty region returned")
+    #print(len(cells))
+    # for cellid in cells:
+    #     coverage[cellid.to_token()] += 1
 # print(coverage)

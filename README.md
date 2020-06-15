@@ -57,7 +57,16 @@ for each time step:
             increment counter
 ```
 
-This means we only have to iterate over ~2200 cells per satellite instead of ~2 million points each.
+This means we only have to iterate over ~2000 (+/-600?) cells per satellite instead of ~2 million 
+points each. However, this approach seems too slow. Comptuing all the covering cells of each satellite
+takes about 90s on a single core in Python. While this could be parallelized, I think maybe there
+are even smarter approaches to consider. Could we maybe just store S2Cap objects and test points
+against them to count the amount of coverage? What I really like from S2 is that it handles the
+issues of latitude and longitude meaning different distances at the equator vs the poles.
+
+In the end for plotting, if we used the cell vertices as plotting locations we would cover the whole
+globe and not oversample at the poles or undersample at the equator.
+
 
 ## Used constants
 
@@ -77,5 +86,5 @@ https://celestrak.com/NORAD/elements/starlink.txt
 
 ### References
 
-https://arxiv.org/pdf/1906.12318.pdf
-https://licensing.fcc.gov/myibfs/download.do?attachment_key=1190019
+- https://arxiv.org/pdf/1906.12318.pdf
+- https://licensing.fcc.gov/myibfs/download.do?attachment_key=1190019

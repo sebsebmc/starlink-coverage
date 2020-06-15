@@ -4,7 +4,7 @@ from skyfield import api
 from skyfield.api import Loader
 
 import math
-import typing
+from typing import List, Dict
 
 import s2sphere
 
@@ -25,7 +25,7 @@ def to_rads(degrees: float) -> float:
 
 RIGHT_ANGLE = to_rads(90)
 
-def load_sats() -> typing.List:
+def load_sats() -> List:
     load = Loader('./tle_cache')
     sats = load.tle_file(url=TLE_URL)
     return sats
@@ -97,7 +97,7 @@ def plotFootprint(sat):
                 alpha=0.7, transform=ccrs.Geodetic())
     plt.savefig('test.png')
 
-area = calcAreaSpherical(340, 35)
+# area = calcAreaSpherical(340, 35)
 
 sats = load_sats()
 print(f"Loaded {len(sats)} satellites")
@@ -108,6 +108,30 @@ now = ts.now()
 # now = ts.tt_jd(2459013.763217299)
 subpoints = {sat.name : sat.at(now).subpoint() for sat in sats}
 
-sat1 = subpoints['STARLINK-1439']
+# sat1 = subpoints['STARLINK-1439']
 # print(f"center: {sat1.latitude.degrees}, {sat1.longitude.degrees} angle: {angle}")
-plotFootprint(sat1)
+# plotFootprint(sat1)
+
+# Can I specify the whole sphere to S2? Docs say an angle >= 180 is the whole sphere
+# region = s2sphere.Cap.from_axis_angle(s2sphere.LatLng.from_degrees(0,0).to_point(), s2sphere.Angle.from_degrees(181))
+# print(region.area())
+# prints 12.566370614359172 which is 4*pi, so yes
+# cells = get_cell_ids(0.,0.,181.)
+# print(len(cells)) # prints 1572864, so yes that should be the whole sphere
+
+coverage: Dict[str,int] = {}
+def readTokens():
+    with open('cell_ids.txt', 'r') as fd:
+        lines = fd.readlines()
+        for line in lines:
+            tok = line.strip()
+            # cell_id = s2sphere.CellId.from_token(tok)
+            coverage[tok] = 0
+
+readTokens()
+for _, sat in subpoints.items():
+    angle = calcCapAngle(sat.elevation.km, 35)
+    cells = get_cell_ids(sat.latitude.degrees, sat.longitude.degrees, angle)
+    for cellid in cells:
+        coverage[cellid.to_token()] += 1
+# print(coverage)

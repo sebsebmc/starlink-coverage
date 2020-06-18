@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.70.1/Build/Cesium/Cesium.js"></script>
+    <script src="https://unpkg.com/h3-js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.70.1/Build/Cesium/Widgets/widgets.css"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div id="cesiumContainer" style="width: 1000px; height:800px"></div>
+    <script>
+        var viewer = new Cesium.Viewer('cesiumContainer', {
+            imageryProvider: new Cesium.UrlTemplateImageryProvider({
+                url: 'https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}.jpg',
+                credit: 'Map tiles by Stamen Design, under CC BY 3.0. Data by OpenStreetMap, under ODbL.'
+            }),
+            baseLayerPicker: false,
+            geocoder: false,
+            animation: false,
+            timeline: false,
+        });
+        let rect = {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [
+                        -99.4482421875,
+                        36.35052700542763
+                    ],
+                    [
+                        -79.89257812499999,
+                        36.35052700542763
+                    ],
+                    [
+                        -79.89257812499999,
+                        46.830133640447386
+                    ],
+                    [
+                        -99.4482421875,
+                        46.830133640447386
+                    ],
+                    [
+                        -99.4482421875,
+                        36.35052700542763
+                    ]
+                ]
+            ]
+        }
+        // viewer.
+        let coverage = {};
+        fetch("./h3_4_cov_full.txt")
+            .then(resp => {
+                resp.text().then(text => {
+                    lines = text.split('\n')
+                    for (line of lines) {
+                        [idx, val] = line.split(',');
+                        coverage[idx] = val;
+                    }
+                    renderHexes();
+                });
+            })
+            .catch(reason => console.error("error" + reason));
+        function renderHexes() {
+            cells = h3.polyfill(rect.coordinates, 4, true);
+            for (const cell of cells) {
+                bounds = h3.h3ToGeoBoundary(cell, true).flat();
+                let alpha = 0;
+                if (coverage[cell]) {
+                    alpha = (coverage[cell] / 1440) * 0.2;
+                }
+                console.log(alpha);
+
+                viewer.entities.add({
+                    name: cell,
+                    polygon: {
+                        hierarchy: Cesium.Cartesian3.fromDegreesArray(bounds),
+                        material: Cesium.Color.RED.withAlpha(alpha),
+                        height: 0,
+                        outline: true,
+                        outlineColor: Cesium.Color.BLACK,
+                    },
+
+                })
+            }
+        }
+
+    </script>
+</body>
+
+</html>

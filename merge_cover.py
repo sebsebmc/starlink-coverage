@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 
 from collections import defaultdict
+from typing import Dict
 
-coverage = defaultdict(int)
+coverage: Dict[str,int] = {}
+with open(f"h3_4_index.txt", "r") as fd:
+    lines = fd.readlines()
+    coverage = {line.strip(): 0 for line in lines}
+print(len(coverage))
 for i in range(4):
     with open(f"h3_4_cov_{i}.txt", "r") as fd:
         lines = fd.readlines()

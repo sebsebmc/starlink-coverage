@@ -200,7 +200,7 @@ TIME_PER_PROCESS = 1440 // 4 # 360 minutes, a quarter of a day
 START_TIME = process * TIME_PER_PROCESS
 
 for i in range(TIME_PER_PROCESS):
-    time = ts.utc(2020,6,19,0,START_TIME+i,0)
+    time = ts.utc(2020,6,20,0,START_TIME+i,0)
     if i % 30 == 0:
         print(time.utc_iso())
     subpoints = {sat.name : sat.at(time).subpoint() for sat in sats}

@@ -65,7 +65,7 @@
                 const avg = calcAverage(cell);
                 const rgb = colorScale(avg).gl();
                 viewer.entities.add({
-                    name: cell,
+                    name: `cell: ${cell.slice(0, -8)} coverage: ${Math.round(avg) | 0} minutes of 1440`,
                     polygon: {
                         hierarchy: Cesium.Cartesian3.fromDegreesArray(bounds),
                         material: new Cesium.Color(rgb[0], rgb[1], rgb[2], 0.5),
@@ -115,6 +115,12 @@
     </script>
     <p>This renders the percentage of the day that a portion of the earth is covered by a Starlink satellite. (Red is no
         coverage, blue is all day coverage).</p>
+    <p>Click on a cell to see how many minutes in a day a cell is covered by at least one satellite. Note that currently
+        for performance reasons the cells are much larger than the resolution the data was simulated at. As such the
+        error within a cell can be quite large, especially near the poles where the coverage drops off rapidly.
+    </p>
+    <p>In my opinion anything less than 1440 minutes (aka continuous coverage) means that SpaceX <em>should not</em>
+        provide service in that area.</p>
     For more info about how it's calculated:
     <a href="https://github.com/sebsebmc/starlink-coverage">https://github.com/sebsebmc/starlink-coverage</a>
 </body>

@@ -1,14 +1,14 @@
 # Goals:
 
 1. % of day covered
-2. Average coverage (factoring the number of satellites covering a location)
+2. Average coverage - factoring the number of satellites covering a location which would be more useful for approximating average bandwith available for an area
 
-## Implementation
+## Original Implementation
 
-1. TLE to ground track
+1. TLE to simulate satellites
 2. Altitude,x,y to conical section on sphere
-   a. Adjustable minimum elevation
-   b. Swap out for more accurate model of earth (WGS-84 ellipsoid)
+    1. Adjustable minimum elevation
+    2. Swap out for more accurate model of earth (WGS-84 ellipsoid)
 3. Map conical section to equi-rectangular area
 4. Translate to pixel coords with resolution of about 100sq mi
 5. Normalize? Overlay
@@ -33,8 +33,8 @@ on an equi-rectangular projection.
 ## Resolution
 
 2 options for spatial resolution in my head originally:
-2048*1024 = 2,097,152
-4096*2048 = 8,388,608‬
+- 2048 x 1024 = 2,097,152
+- 4096 x 2048 = 8,388,608‬
 
 Instead of trying to use a 2d array to represent the footprints and dealing with the spherical nature
 of the Earth, I am instead going to try and use S2 level 9 cells to track coverage. According to the
@@ -47,7 +47,8 @@ we can find that a whole "train" of Starlink satellites crosses a locations view
 so our temporal resolution needs to be a minute if not faster if we want accurate results. 
 
 ## S2 based approach
-
+The original implementation has lots of gross properties and requires dealing with many projections.
+So I tried using a new approach that used ~ equal area tesselated grids. The one I knew about was S2 so I tried that first.
 ```
 for each time step:
     for each sat:
@@ -67,7 +68,7 @@ issues of latitude and longitude meaning different distances at the equator vs t
 In the end for plotting, if we used the cell vertices as plotting locations we would cover the whole
 globe and not oversample at the poles or undersample at the equator.
 
-## S2, more like 2 slow... An H3 approach
+## S2, more like 2Slow... An H3 approach
 So S2 was just being way to slow to return cells for a given covering. (90s to simulate one timestep)
 Now I have to make some guesses about projections for H3 and but it is ~4.5 times faster to simulate 
 a timestep than S2 (now takes 20 seconds on my machine). I'm gonna proceed with the H3 approach for
@@ -78,6 +79,8 @@ now.
 - Earth Mean Equitorial Radius = 6,378.1km
 - Minimum angle for user terminals = 35deg
 
+(It has recently come to my attention that there may be newer data from SpaceX that the minimum user terminal angle would be 25 degrees, so my data may be more conservative. The data I used is from the FCC document linked below.)
+
 ## Starlink details
 
 From the second reference below I found that Starlink is targeting user terminal minimum angles of 35deg
@@ -87,7 +90,7 @@ the starlink satellites already in space are elevating or are at 550 km
 Stralink TLE's
 https://celestrak.com/NORAD/elements/starlink.txt
 
-## Issues at the IDL?
+## Issues at the IDL (anitmeridian)?
 When visualizing the data we see that there is less coverage at the international date line. This doesn't
 really make a lot of sense given the surrounding areas and the orbits the satellites are in. To me this
 means there is an issue in the math, namely the calculations for the cap sphere are likely going beyond

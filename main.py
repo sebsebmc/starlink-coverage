@@ -8,7 +8,7 @@ import math
 import json 
 from collections import defaultdict
 
-from typing import List, Dict, DefaultDict
+from typing import List, Dict, DefaultDict, Set
 
 import s2sphere
 
@@ -200,21 +200,20 @@ TIME_PER_PROCESS = 1440 // 4 # 360 minutes, a quarter of a day
 START_TIME = process * TIME_PER_PROCESS
 
 for i in range(TIME_PER_PROCESS):
-    time = ts.utc(2020,6,18,0,START_TIME+i,0)
-    if i % 60 == 0:
+    time = ts.utc(2020,6,19,0,START_TIME+i,0)
+    if i % 30 == 0:
         print(time.utc_iso())
     subpoints = {sat.name : sat.at(time).subpoint() for sat in sats}
+    coverage_set: Set[str] = set()
     for sat_name, sat in subpoints.items():
         angle = calcCapAngle(sat.elevation.km, 35)
         cells = get_cell_ids_h3(sat.latitude.degrees, sat.longitude.degrees, angle)
         if len(cells) == 0:
             Exception("empty region returned")
         for cell in cells:
-            coverage[cell] += 1
-        #print(len(cells))
-        # for cellid in cells:
-        #     coverage[cellid.to_token()] += 1
-    # print(coverage)
+            coverage_set.add(cell)
+    for cell in coverage_set:
+        coverage[cell] += 1
 
 with open(f"h3_{H3_RESOLUTION_LEVEL}_cov_{process}.txt", "w") as fd:
     for cell, cov in coverage.items():

@@ -5,6 +5,7 @@
     <meta charset="utf-8">
     <script src="https://cesium.com/downloads/cesiumjs/releases/1.70.1/Build/Cesium/Cesium.js"></script>
     <script src="https://unpkg.com/h3-js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js"></script>
     <link href="https://cesium.com/downloads/cesiumjs/releases/1.70.1/Build/Cesium/Widgets/widgets.css"
         rel="stylesheet">
 </head>
@@ -12,9 +13,10 @@
 <body>
     <div id="cesiumContainer" style="width: 1000px; height:800px"></div>
     <script>
+        const colorScale = chroma.scale('RdYlBu').domain([0, 1440]);
         var viewer = new Cesium.Viewer('cesiumContainer', {
             imageryProvider: new Cesium.UrlTemplateImageryProvider({
-                url: 'https://stamen-tiles-{s}.a.ssl.fastly.net/terrain/{z}/{x}/{y}.jpg',
+                url: 'https://stamen-tiles-{s}.a.ssl.fastly.net/toner/{z}/{x}/{y}.png',
                 credit: 'Map tiles by Stamen Design, under CC BY 3.0. Data by OpenStreetMap, under ODbL.'
             }),
             baseLayerPicker: false,
@@ -22,62 +24,18 @@
             animation: false,
             timeline: false,
         });
-        let rect = {
-            "type": "Polygon",
-            "coordinates": [
-                [
-                    [
-                        -99.4482421875,
-                        36.35052700542763
-                    ],
-                    [
-                        -79.89257812499999,
-                        36.35052700542763
-                    ],
-                    [
-                        -79.89257812499999,
-                        46.830133640447386
-                    ],
-                    [
-                        -99.4482421875,
-                        46.830133640447386
-                    ],
-                    [
-                        -99.4482421875,
-                        36.35052700542763
-                    ]
-                ]
-            ]
-        }
-        // viewer.
-        let coverage = {};
-        fetch("./h3_4_cov_full.txt")
-            .then(resp => {
-                resp.text().then(text => {
-                    lines = text.split('\n')
-                    for (line of lines) {
-                        [idx, val] = line.split(',');
-                        coverage[idx] = val;
-                    }
-                    renderHexes();
-                });
-            })
-            .catch(reason => console.error("error" + reason));
-        function renderHexes() {
-            cells = h3.polyfill(rect.coordinates, 4, true);
-            for (const cell of cells) {
-                bounds = h3.h3ToGeoBoundary(cell, true).flat();
-                let alpha = 0;
-                if (coverage[cell]) {
-                    alpha = (coverage[cell] / 1440) * 0.2;
-                }
-                console.log(alpha);
 
+        function renderHexes() {
+            let cells = h3.polyfill(rect.coordinates, 4, true);
+            for (const cell of cells) {
+                let bounds = h3.h3ToGeoBoundary(cell, true).flat();
+                let rgb = colorScale(coverage[cell]).gl();
+                // console.log(colorScale(coverage[cell]).hex());
                 viewer.entities.add({
                     name: cell,
                     polygon: {
                         hierarchy: Cesium.Cartesian3.fromDegreesArray(bounds),
-                        material: Cesium.Color.RED.withAlpha(alpha),
+                        material: new Cesium.Color(rgb[0], rgb[1], rgb[2], 0.5),
                         height: 0,
                         outline: true,
                         outlineColor: Cesium.Color.BLACK,
@@ -86,7 +44,73 @@
                 })
             }
         }
+        function calcAverage(cell) {
+            const baseRes = h3.h3GetResolution(cell);
+            if (baseRes > 3) {
+                console.error("Can't calculate at higher resolutions!");
+                return;
+            }
+            const res4_children = h3.h3ToChildren(cell, 4);
+            let total = 0;
+            for (const child of res4_children) {
+                total += coverage[child];
+            }
+            return total / res4_children.length;
+        }
 
+        function renderCells(cells) {
+            for (const cell of cells) {
+                let bounds = h3.h3ToGeoBoundary(cell, true).flat();
+                // const res = h3.h3GetResolution(cell);
+                const avg = calcAverage(cell);
+                const rgb = colorScale(avg).gl();
+                viewer.entities.add({
+                    name: cell,
+                    polygon: {
+                        hierarchy: Cesium.Cartesian3.fromDegreesArray(bounds),
+                        material: new Cesium.Color(rgb[0], rgb[1], rgb[2], 0.5),
+                        height: 0,
+                        outline: true,
+                        outlineColor: Cesium.Color.RED,
+                    },
+
+                })
+            }
+        }
+        function onReady() {
+            const res0 = h3.getRes0Indexes();
+            let res2 = [];
+            for (const cell of res0) {
+                res2_cells = h3.h3ToChildren(cell, 2);
+                res2.push(res2_cells);
+            }
+            res2 = res2.flat();
+            renderCells(res2);
+        }
+
+        let scene = viewer.scene;
+        if (!scene.pickPositionSupported) {
+            window.alert("This browser does not support pickPosition.");
+        }
+        let handler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
+        handler.setInputAction(movement => {
+            console.log(movement);
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+        let coverage = {};
+        fetch("./h3_4_cov_full.txt")
+            .then(resp => {
+                resp.text().then(text => {
+                    lines = text.split('\n')
+                    for (line of lines) {
+                        [idx, val] = line.split(',');
+                        coverage[idx] = parseInt(val, 10);
+                    }
+                    onReady();
+                    //renderHexes();
+                });
+            })
+            .catch(reason => console.error("error" + reason));
     </script>
 </body>
 

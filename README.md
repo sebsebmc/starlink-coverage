@@ -77,7 +77,6 @@ now.
 
 - Earth Mean Equitorial Radius = 6,378.1km
 - Minimum angle for user terminals = 35deg
--
 
 ## Starlink details
 

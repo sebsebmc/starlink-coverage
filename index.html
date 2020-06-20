@@ -8,10 +8,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js"></script>
     <link href="https://cesium.com/downloads/cesiumjs/releases/1.70.1/Build/Cesium/Widgets/widgets.css"
         rel="stylesheet">
+    <link href="/index.css" rel="stylesheet">
 </head>
 
 <body>
-    <div id="cesiumContainer" style="width: 1000px; height:800px"></div>
+    <div id="cesiumContainer" class="fullSize"></div>
     <script>
         const colorScale = chroma.scale('RdYlBu').domain([0, 1440]);
         var viewer = new Cesium.Viewer('cesiumContainer', {
@@ -113,19 +114,21 @@
             })
             .catch(reason => console.error("error" + reason));
     </script>
-    <p>This renders the percentage of the day that a portion of the earth is covered by a Starlink satellite. (Red is no
-        coverage, blue is all day coverage).</p>
-    <p>Click on a cell to see how many minutes in a day a cell is covered by at least one satellite. Note that currently
-        for performance reasons the cells are much larger than the resolution the data was simulated at. As such the
-        error within a cell can be quite large, especially near the poles where the coverage drops off rapidly.
-    </p>
-    <p> I am aware that there is an issue calculating coverage at the International Date Line (antimeridian), this is
-        noted in my README on github.
-    </p>
-    <p>In my opinion anything less than 1440 minutes (aka continuous coverage) means that SpaceX <em>should not</em>
-        provide service in that area.</p>
-    For more info about how it's calculated:
-    <a href="https://github.com/sebsebmc/starlink-coverage">https://github.com/sebsebmc/starlink-coverage</a>
+    <div class="description">
+        <p>This renders the percentage of the day that a portion of the earth is covered by a Starlink satellite. (Red is no
+            coverage, blue is all day coverage).</p>
+        <p>Click on a cell to see how many minutes in a day a cell is covered by at least one satellite. Note that currently
+            for performance reasons the cells are much larger than the resolution the data was simulated at. As such the
+            error within a cell can be quite large, especially near the poles where the coverage drops off rapidly.
+        </p>
+        <p> I am aware that there is an issue calculating coverage at the International Date Line (antimeridian), this is
+            noted in my README on github.
+        </p>
+        <p>In my opinion anything less than 1440 minutes (aka continuous coverage) means that SpaceX <em>should not</em>
+            provide service in that area.</p>
+        For more info about how it's calculated:
+        <a href="https://github.com/sebsebmc/starlink-coverage">https://github.com/sebsebmc/starlink-coverage</a>
+    </div>
 </body>
 
 </html>

@@ -91,6 +91,9 @@
         }
 
         let scene = viewer.scene;
+        scene.skyAtmosphere.show = false;
+        scene.fog.enabled = false;
+        scene.globe.showGroundAtmosphere = false;
         if (!scene.pickPositionSupported) {
             window.alert("This browser does not support pickPosition.");
         }

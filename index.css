@@ -15,6 +15,9 @@ body {
     padding: 2em;
     max-width: 60em;
 }
+h1 {
+    text-align: center;
+}
 a {
     color: #8AF;
 }

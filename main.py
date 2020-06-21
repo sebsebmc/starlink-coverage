@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 
+from types import SimpleNamespace
 from skyfield import api
 from skyfield.api import Loader
 
 import sys
 import math
 import json
+import itertools
 from collections import defaultdict
 
-from typing import List, Dict, DefaultDict, Set
+from typing import List, Dict, DefaultDict, Set, Tuple
 
 import s2sphere
 
@@ -49,15 +51,15 @@ def filter_sats(sats: List) -> List:
     understanding of what the operational satellites are"""
     op_sats: List = []
     for sat in sats:
-        n = sat.model.no_kozai
+        n = (sat.model.no_kozai / (2 * math.pi)) * 1440
         e = sat.model.ecco
         period = 1440/n
         mu = 398600.4418  # earth grav constant
-        a = (mu/(n*2*pi/(24*3600)) ** 2) ** (1/3)  # semi-major axis
+        a = (mu/(n*2*math.pi/(24*3600)) ** 2) ** (1./3.)  # semi-major axis
         # Using semi-major axis "a", eccentricity "e", and the Earth's radius in km,
         perigee = (a * (1 - e)) - 6378.135
         if perigee > 540:
-            op_sats.push(sat)
+            op_sats.append(sat)
     return op_sats
 
 
@@ -99,7 +101,6 @@ def get_cell_ids(lat, lng, angle):
     coverer.max_level = 9
     cells = coverer.get_covering(region)
     return cells
-    # return sorted([x.id() for x in cells])
 
 
 def plotFootprint(sat):
@@ -136,7 +137,44 @@ def plotFootprint(sat):
     plt.savefig('test.png')
 
 
-def get_cell_ids_h3(lat: float, lng: float, angle: float) -> List:
+def split_antimeridian_polygon(polygon: List[List[float]]) -> Tuple[List, List]:
+    """Takes a GeoJSON formatted list of vertex coordinates List[[lon,lat]]
+    and checks if the longitude crosses over the antimeridian. It splits the polygon
+    in 2 at the antimeridian.
+    """
+
+    # We split the polygon into 2. lon < 180 goes into poly1
+    poly1, poly2 = [], []
+    has_split = False
+    for idx in range(len(polygon)-1):
+        first = polygon[idx]
+        second = polygon[idx+1]
+        if (first[0] < 180 and second[0] > 180) or (first[0] > 180 and second[0] < 180):
+            # split
+            new_lat = np.interp([180.0], np.array([first[0], second[0]]),
+                                np.array([first[1], second[1]]))[0]
+            new_point = [180.0, float(new_lat)]
+            poly1.append([180.0, float(new_lat)])
+            poly2.append([180.0, float(new_lat)])
+        elif first[0] < 180:
+            poly1.append(first)
+        else:
+            poly2.append(first)
+    # GeoJSON polygons must have the same point for the first and last vertex
+    poly1.append(poly1[0])
+    poly2.append(poly2[0])
+    # h3 doesn't like longitudes > 180 so make them the negative equivalent
+    poly2_wrapped: List[List[float]] = []
+    for point in poly2:
+        poly2_wrapped.append([-180 + (point[0]-180), point[1]])
+    mapping1 = shapely.geometry.mapping(shapely.geometry.Polygon(poly1))
+    mapping2 = shapely.geometry.mapping(
+        shapely.geometry.polygon.orient(shapely.geometry.Polygon(poly2_wrapped), 1.0))
+
+    return (mapping1, mapping2)
+
+
+def get_cell_ids_h3(lat: float, lng: float, angle: float) -> Set:
     p = shapely.geometry.Point([lng, lat])
     # so to more accurately match projections maybe arc length of a sphere would be best?
     arc_length = R_MEAN * angle  # in km
@@ -152,7 +190,23 @@ def get_cell_ids_h3(lat: float, lng: float, angle: float) -> List:
         print(f"lat:{lat}, lng:{lng}")
         print(polygon)
 
-    cells = h3.polyfill(mapping, H3_RESOLUTION_LEVEL, True)
+    cells = set()
+    needs_split = False
+
+    for point in polygon:
+        if point[0] > 180:
+            needs_split = True
+            break
+
+    if needs_split:
+        try:
+            (first, second) = split_antimeridian_polygon(polygon)
+            cells.update(h3.polyfill(first, H3_RESOLUTION_LEVEL, True))
+            cells.update(h3.polyfill(second, H3_RESOLUTION_LEVEL, True))
+        except:
+            print(f"lat:{lat}, lng:{lng}")
+    else:
+        cells = h3.polyfill(mapping, H3_RESOLUTION_LEVEL, True)
 
     return cells
 
@@ -165,7 +219,7 @@ def plotFootprintH3(sat, h3_cells):
 
     proj = cimgt.Stamen('terrain-background')
     plt.figure(figsize=(6, 6), dpi=400)
-    ax = plt.axes(projection=proj.crs)
+    ax = plt.axes(projection=ccrs.PlateCarree(central_longitude=180))
     ax.add_image(proj, 6)
     ax.set_extent([sat.longitude.degrees-10., sat.longitude.degrees+10.,
                    sat.latitude.degrees-10,  sat.latitude.degrees+10.], crs=ccrs.Geodetic())
@@ -190,11 +244,11 @@ sats = load_sats()
 print(f"Loaded {len(sats)} satellites")
 
 op_sats = filter_sats(sats)
-
+print(f"Filtered to {len(op_sats)} operational satellites")
 ts = api.load.timescale()
 now = ts.now()
 
-subpoints = {sat.name: sat.at(now).subpoint() for sat in sats}
+subpoints = {sat.name: sat.at(now).subpoint() for sat in op_sats}
 
 sat1 = subpoints['STARLINK-1284']
 angle = calcCapAngle(sat1.elevation.km, 35)
@@ -220,10 +274,10 @@ TIME_PER_PROCESS = 1440 // 4  # 360 minutes, a quarter of a day
 START_TIME = process * TIME_PER_PROCESS
 
 for i in range(TIME_PER_PROCESS):
-    time = ts.utc(2020, 6, 20, 0, START_TIME+i, 0)
+    time = ts.utc(2020, 6, 21, 0, START_TIME+i, 0)
     if i % 30 == 0:
         print(time.utc_iso())
-    subpoints = {sat.name: sat.at(time).subpoint() for sat in sats}
+    subpoints = {sat.name: sat.at(time).subpoint() for sat in op_sats}
     coverage_set: Set[str] = set()
     for sat_name, sat in subpoints.items():
         angle = calcCapAngle(sat.elevation.km, 35)

@@ -133,10 +133,6 @@
             for performance reasons the cells are much larger than the resolution the data was simulated at. As such the
             error within a cell can be quite large, especially near the poles where the coverage drops off rapidly.
         </p>
-        <p> I am aware that there is an issue calculating coverage at the International Date Line (antimeridian), this
-            is
-            noted in my README on github.
-        </p>
         <p>In my opinion anything less than 1440 minutes (aka continuous coverage) means that SpaceX <em>should not</em>
             provide service in that area.</p>
         For more info about how it's calculated:
@@ -145,6 +141,7 @@
         <ul>
             <li>6-20-20 - Removed satellites that had low altitudes because they are not believed to be in operational
                 orbits.</li>
+            <li>6-21-20 - Fixed remaining issues with calculations at the antimerdian.</li>
         </ul>
     </div>
 </body>

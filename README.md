@@ -90,13 +90,6 @@ the starlink satellites already in space are elevating or are at 550 km
 Stralink TLE's
 https://celestrak.com/NORAD/elements/starlink.txt
 
-## Issues at the IDL (anitmeridian)?
-When visualizing the data we see that there is less coverage at the international date line. This doesn't
-really make a lot of sense given the surrounding areas and the orbits the satellites are in. To me this
-means there is an issue in the math, namely the calculations for the cap sphere are likely going beyond
-180 and -180 degrees, but GeoJSON seems to handle these coordinates just fine. Turns out its an issue 
-with H3 https://github.com/uber/h3/issues/210 that seems like a pain to deal with.
-
 ### References
 
 - https://arxiv.org/pdf/1906.12318.pdf

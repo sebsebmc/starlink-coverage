@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from types import SimpleNamespace
 from skyfield import api
 from skyfield.api import Loader
 
@@ -15,13 +14,14 @@ from typing import List, Dict, DefaultDict, Set, Tuple
 import s2sphere
 
 import numpy as np
-import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
-import cartopy.io.img_tiles as cimgt
+
 import shapely.geometry
 from shapely.geometry import Polygon
 import geog
 import h3
+
+# optional for debugging
+import debug_plot
 
 TLE_URL = 'https://celestrak.com/NORAD/elements/starlink.txt'
 R_MEAN = 6378.1  # km
@@ -103,70 +103,41 @@ def get_cell_ids(lat, lng, angle):
     return cells
 
 
-def plotFootprint(sat):
-    """Uses cartopy to replot the footprint, mostly used for debugging and validating
-    math and library usage"""
-    angle = calcCapAngle(sat.elevation.km, 35)
-    cells = get_cell_ids(sat.latitude.degrees, sat.longitude.degrees, angle)
-    print(len(cells))
-
-    proj = cimgt.Stamen('terrain-background')
-    plt.figure(figsize=(6, 6), dpi=400)
-    ax = plt.axes(projection=proj.crs)
-    ax.add_image(proj, 6)
-    ax.set_extent([sat.longitude.degrees-10., sat.longitude.degrees+10.,
-                   sat.latitude.degrees-10,  sat.latitude.degrees+10.], crs=ccrs.Geodetic())
-    ax.background_patch.set_visible(False)
-
-    geoms = []
-    for cellid in cells:
-        new_cell = s2sphere.Cell(cellid)
-        vertices = []
-        for i in range(0, 4):
-            vertex = new_cell.get_vertex(i)
-            latlng = s2sphere.LatLng.from_point(vertex)
-            vertices.append((latlng.lng().degrees,
-                             latlng.lat().degrees))
-        geo = Polygon(vertices)
-        geoms.append(geo)
-
-    ax.add_geometries(geoms, crs=ccrs.Geodetic(), facecolor='red',
-                      edgecolor='black', alpha=0.4)
-    ax.plot(sat.longitude.degrees, sat.latitude.degrees, marker='o', color='red', markersize=4,
-            alpha=0.7, transform=ccrs.Geodetic())
-    plt.savefig('test.png')
-
-
 def split_antimeridian_polygon(polygon: List[List[float]]) -> Tuple[List, List]:
     """Takes a GeoJSON formatted list of vertex coordinates List[[lon,lat]]
     and checks if the longitude crosses over the antimeridian. It splits the polygon
-    in 2 at the antimeridian.
+    in 2 at the antimeridian. See: https://github.com/uber/h3/issues/210
     """
 
     # We split the polygon into 2. lon < 180 goes into poly1
     poly1, poly2 = [], []
+    split_loc = 0.0
     has_split = False
     for idx in range(len(polygon)-1):
         first = polygon[idx]
         second = polygon[idx+1]
-        if (first[0] < 180 and second[0] > 180) or (first[0] > 180 and second[0] < 180):
+        if (abs(first[0]) < 180 and abs(second[0]) > 180) or (abs(first[0]) > 180 and abs(second[0]) < 180):
+            split_loc = math.copysign(180.0, first[0])
             # split
-            new_lat = np.interp([180.0], np.array([first[0], second[0]]),
+            new_lat = np.interp([split_loc], np.array([first[0], second[0]]),
                                 np.array([first[1], second[1]]))[0]
-            new_point = [180.0, float(new_lat)]
-            poly1.append([180.0, float(new_lat)])
-            poly2.append([180.0, float(new_lat)])
-        elif first[0] < 180:
+            new_point = [split_loc, float(new_lat)]
+            poly1.append([split_loc, float(new_lat)])
+            poly2.append([split_loc, float(new_lat)])
+        elif abs(first[0]) < 180:
             poly1.append(first)
         else:
             poly2.append(first)
     # GeoJSON polygons must have the same point for the first and last vertex
     poly1.append(poly1[0])
     poly2.append(poly2[0])
-    # h3 doesn't like longitudes > 180 so make them the negative equivalent
+    # h3 doesn't like |longitude| > 180 so make them the negative or positive equivalent
     poly2_wrapped: List[List[float]] = []
     for point in poly2:
-        poly2_wrapped.append([-180 + (point[0]-180), point[1]])
+        if split_loc > 0:
+            poly2_wrapped.append([-180 + (point[0]-180), point[1]])
+        else:
+            poly2_wrapped.append([180 + (point[0]+180), point[1]])
     mapping1 = shapely.geometry.mapping(shapely.geometry.Polygon(poly1))
     mapping2 = shapely.geometry.mapping(
         shapely.geometry.polygon.orient(shapely.geometry.Polygon(poly2_wrapped), 1.0))
@@ -194,7 +165,7 @@ def get_cell_ids_h3(lat: float, lng: float, angle: float) -> Set:
     needs_split = False
 
     for point in polygon:
-        if point[0] > 180:
+        if point[0] > 180 or point[0] < -180:
             needs_split = True
             break
 
@@ -209,35 +180,6 @@ def get_cell_ids_h3(lat: float, lng: float, angle: float) -> Set:
         cells = h3.polyfill(mapping, H3_RESOLUTION_LEVEL, True)
 
     return cells
-
-
-def plotFootprintH3(sat, h3_cells):
-    """Uses cartopy to replot the footprint, mostly used for debugging and validating
-    math and library usage
-    """
-    angle = calcCapAngle(sat.elevation.km, 35)
-
-    proj = cimgt.Stamen('terrain-background')
-    plt.figure(figsize=(6, 6), dpi=400)
-    ax = plt.axes(projection=ccrs.PlateCarree(central_longitude=180))
-    ax.add_image(proj, 6)
-    ax.set_extent([sat.longitude.degrees-10., sat.longitude.degrees+10.,
-                   sat.latitude.degrees-10,  sat.latitude.degrees+10.], crs=ccrs.Geodetic())
-    ax.background_patch.set_visible(False)
-
-    geoms = []
-    for cellid in h3_cells:
-        vertices = []
-        bounds = h3.h3_to_geo_boundary(cellid)  # arrays of [lat, lng]
-        coords = [[lng, lat] for [lat, lng] in bounds]
-        geo = Polygon(coords)
-        geoms.append(geo)
-
-    ax.add_geometries(geoms, crs=ccrs.Geodetic(), facecolor='red',
-                      edgecolor='black', alpha=0.4)
-    ax.plot(sat.longitude.degrees, sat.latitude.degrees, marker='o', color='red', markersize=4,
-            alpha=0.7, transform=ccrs.Geodetic())
-    plt.savefig('test_h3.png')
 
 
 sats = load_sats()
@@ -274,7 +216,7 @@ TIME_PER_PROCESS = 1440 // 4  # 360 minutes, a quarter of a day
 START_TIME = process * TIME_PER_PROCESS
 
 for i in range(TIME_PER_PROCESS):
-    time = ts.utc(2020, 6, 21, 0, START_TIME+i, 0)
+    time = ts.utc(2020, 6, 22, 0, START_TIME+i, 0)
     if i % 30 == 0:
         print(time.utc_iso())
     subpoints = {sat.name: sat.at(time).subpoint() for sat in op_sats}

@@ -20,13 +20,17 @@ from shapely.geometry import Polygon
 import geog
 import h3
 
+import requests
+import csv
+from datetime import datetime
+
 # optional for debugging
 import debug_plot
 
 TLE_URL = 'https://celestrak.com/NORAD/elements/starlink.txt'
 R_MEAN = 6378.1  # km
 H3_RESOLUTION_LEVEL = 4
-process = int(sys.argv[1])
+MIN_TERMINAL_ANGLE_DEG = 35
 
 
 def to_deg(radians: float) -> float:
@@ -50,6 +54,14 @@ def filter_sats(sats: List) -> List:
     """From https://www.space-track.org/documentation#faq filter to our best
     understanding of what the operational satellites are"""
     op_sats: List = []
+    failures_url = "https://docs.google.com/spreadsheets/d/1mTPX5JSkeaoViGT_1wigrjwjzIVkpzI3xhFpEm909oM/gviz/tq?gid=71799984&tqx=out:csv"
+    r = requests.get(failures_url)
+    nonoperational = set()
+    for row in csv.DictReader(r.iter_lines(decode_unicode=True)):
+        name = row['NAME'].strip()
+        event_date = datetime.strptime(row['DATE'], "%m/%d/%Y").date()
+        event = row['EVENT'].strip()
+        nonoperational.add(name)
     for sat in sats:
         n = (sat.model.no_kozai / (2 * math.pi)) * 1440
         e = sat.model.ecco
@@ -58,8 +70,9 @@ def filter_sats(sats: List) -> List:
         a = (mu/(n*2*math.pi/(24*3600)) ** 2) ** (1./3.)  # semi-major axis
         # Using semi-major axis "a", eccentricity "e", and the Earth's radius in km,
         perigee = (a * (1 - e)) - 6378.135
-        if perigee > 540:
+        if perigee > 540 and sat.name not in nonoperational:
             op_sats.append(sat)
+
     return op_sats
 
 
@@ -212,26 +225,34 @@ def readH3Indices() -> List[str]:
     return lines
 
 
-TIME_PER_PROCESS = 1440 // 4  # 360 minutes, a quarter of a day
-START_TIME = process * TIME_PER_PROCESS
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        process: int = int(sys.argv[1])
+    else:
+        process = 0
+    if len(sys.argv) > 2:
+        MIN_TERMINAL_ANGLE_DEG = int(sys.argv[2])
 
-for i in range(TIME_PER_PROCESS):
-    time = ts.utc(2020, 6, 22, 0, START_TIME+i, 0)
-    if i % 30 == 0:
-        print(time.utc_iso())
-    subpoints = {sat.name: sat.at(time).subpoint() for sat in op_sats}
-    coverage_set: Set[str] = set()
-    for sat_name, sat in subpoints.items():
-        angle = calcCapAngle(sat.elevation.km, 35)
-        cells = get_cell_ids_h3(sat.latitude.degrees,
-                                sat.longitude.degrees, angle)
-        if len(cells) == 0:
-            Exception("empty region returned")
-        for cell in cells:
-            coverage_set.add(cell)
-    for cell in coverage_set:
-        coverage[cell] += 1
+    TIME_PER_PROCESS = 1440 // 4  # 360 minutes, a quarter of a day
+    START_TIME = process * TIME_PER_PROCESS
+    # Consider swapping the loop to be sats then time for cache reasons?
+    for i in range(TIME_PER_PROCESS):
+        time = ts.utc(2020, 7, 25, 0, START_TIME+i, 0)
+        if i % 30 == 0:
+            print(time.utc_iso())
+        subpoints = {sat.name: sat.at(time).subpoint() for sat in op_sats}
+        coverage_set: Set[str] = set()
+        for sat_name, sat in subpoints.items():
+            angle = calcCapAngle(sat.elevation.km, MIN_TERMINAL_ANGLE_DEG)
+            cells = get_cell_ids_h3(sat.latitude.degrees,
+                                    sat.longitude.degrees, angle)
+            if len(cells) == 0:
+                Exception("empty region returned")
+            for cell in cells:
+                coverage_set.add(cell)
+        for cell in coverage_set:
+            coverage[cell] += 1
 
-with open(f"h3_{H3_RESOLUTION_LEVEL}_cov_{process}.txt", "w") as fd:
-    for cell, cov in coverage.items():
-        fd.write(f"{cell},{cov}\n")
+    with open(f"h3_{H3_RESOLUTION_LEVEL}_cov_{process}.txt", "w") as fd:
+        for cell, cov in coverage.items():
+            fd.write(f"{cell},{cov}\n")

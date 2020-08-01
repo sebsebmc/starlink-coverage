@@ -6,21 +6,51 @@
     <script src="https://cesium.com/downloads/cesiumjs/releases/1.70.1/Build/Cesium/Cesium.js"></script>
     <script src="https://unpkg.com/h3-js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/benchmark/2.1.4/benchmark.min.js"></script>
     <link href="https://cesium.com/downloads/cesiumjs/releases/1.70.1/Build/Cesium/Widgets/widgets.css"
         rel="stylesheet">
     <link href="index.css" rel="stylesheet">
+    <title>Starlink daily coverage estimates</title>
 </head>
 
 <body>
     <h1>UPDATE:</h1>
     <p class="description">
-        The data may look very different from the earlier version of the dataset because I have removed a lot of
-        satellites that were not at operational altitudes.
+        I am now providing two different data sets: one that is calculated witha 25 degree minimum user terminal angle
+        and one with a 35 degree minimum user terminal angle. The more recent SpaceX filings show that they are capable
+        of using the 25 degree minimum but that they eventually want to increase that. The previous datasets were
+        calcualted witha 35 degree minimum as that was what I had found on file at the time. With the lower minimum
+        angle and about 100 more satellites at operational altitudes the 25 degree dataset now show bands with
+        continuous coverage.
     </p>
+    <p class="description">
+        Furthermore, I plan to calculate what I call the <em>satellite multiplicity</em>, the number of satellites
+        overhead at any given time on average, since the number of overlapping satellites is relevant to some
+        calculations for routing and bandwith.
+    </p>
+    <p class="description">
+        New Features: You can now double-click a cell to toggle showing more granular data.
+        Cells with 100% uptime now display a gold. Faster parsing, reduced battery drain,
+        hopefully.
+    </p>
+    <div id="toolbar">
+        <label for="minAngleSelect">Choose a minimum angle to load the dataset:</label>
+        <select name="minAngle" id="minAngleSelect" onchange="loadDataset(this.value)">
+            <option value="35">35 degrees</option>
+            <option value="25">25 degrees</option>
+        </select>
+    </div>
     <div id="cesiumContainer" class="fullSize"></div>
     <script>
         const total = 1440;
         const colorScale = chroma.scale('RdYlBu').domain([0, total]);
+        const maxBlue = colorScale(total).gl();
+        let zoomedCell = {};
+        const OPACITY = 0.7;
+        let uptimeMaterial = new Cesium.ImageMaterialProperty({
+            image: 'Gold_Star.png',
+            transparent: true,
+        });
         var viewer = new Cesium.Viewer('cesiumContainer', {
             imageryProvider: new Cesium.UrlTemplateImageryProvider({
                 url: 'https://stamen-tiles-{s}.a.ssl.fastly.net/toner/{z}/{x}/{y}.png',
@@ -30,6 +60,7 @@
             geocoder: false,
             animation: false,
             timeline: false,
+            requestRenderMode: true,
         });
 
         function renderHexes() {
@@ -37,12 +68,11 @@
             for (const cell of cells) {
                 let bounds = h3.h3ToGeoBoundary(cell, true).flat();
                 let rgb = colorScale(coverage[cell]).gl();
-                // console.log(colorScale(coverage[cell]).hex());
                 viewer.entities.add({
                     name: cell,
                     polygon: {
                         hierarchy: Cesium.Cartesian3.fromDegreesArray(bounds),
-                        material: new Cesium.Color(rgb[0], rgb[1], rgb[2], 0.5),
+                        material: new Cesium.Color(rgb[0], rgb[1], rgb[2], OPACITY),
                         height: 0,
                         outline: true,
                         outlineColor: Cesium.Color.BLACK,
@@ -51,6 +81,7 @@
                 })
             }
         }
+
         function calcAverage(cell) {
             const baseRes = h3.h3GetResolution(cell);
             if (baseRes > 3) {
@@ -68,25 +99,62 @@
         function renderCells(cells) {
             for (const cell of cells) {
                 let bounds = h3.h3ToGeoBoundary(cell, true).flat();
-                // const res = h3.h3GetResolution(cell);
-                const avg = calcAverage(cell);
+                const res = h3.h3GetResolution(cell);
+                let avg = 0;
+                if (res === 2) {
+                    avg = calcAverage(cell);
+                } else {
+                    avg = coverage[cell];
+                }
+                let mat;
                 const rgb = colorScale(avg).gl();
                 viewer.entities.add({
+                    id: "" + cell,
                     name: `cell: ${cell.slice(0, -8)}`,
                     description: `This cell is covered on average ${Math.round(avg) | 0} minutes of ${total} for the day. <br/>
                     This is approximately ${Math.round((avg / total) * 1000) / 10}% of the day.`,
                     polygon: {
                         hierarchy: Cesium.Cartesian3.fromDegreesArray(bounds),
-                        material: new Cesium.Color(rgb[0], rgb[1], rgb[2], 0.5),
+                        material: (avg > 1439.9 ? uptimeMaterial : new Cesium.Color(rgb[0], rgb[1], rgb[2], OPACITY)),
                         height: 0,
                         outline: true,
                         outlineColor: Cesium.Color.BLACK,
-                        outlineWidth: 0.5,
+                        outlineWidth: 1.0,
                     },
 
                 })
             }
         }
+
+        function renderSubHexes(evt) {
+            let ellipsoid = viewer.scene.globe.ellipsoid;
+            let cartesian = viewer.camera.pickEllipsoid(evt.position, ellipsoid);
+            let lat, long;
+            if (cartesian) {
+                let cartographic = ellipsoid.cartesianToCartographic(cartesian);
+                long = Cesium.Math.toDegrees(cartographic.longitude);
+                lat = Cesium.Math.toDegrees(cartographic.latitude);
+            } else {
+                return;
+            }
+            cell = h3.geoToH3(lat, long, 2);
+            res4Cells = h3.h3ToChildren(cell, 4);
+            // If we zoomed this cell, revert it
+            if (zoomedCell[cell]) {
+                zoomedCell[cell] = undefined;
+                for (const cellid of res4Cells) {
+                    viewer.entities.removeById(cellid);
+                }
+                renderCells([cell]);
+            } else {
+                zoomedCell[cell] = true;
+                let toRemove = viewer.selectedEntity;
+                viewer.selectedEntity = undefined;
+                viewer.entities.remove(toRemove);
+                renderCells(res4Cells);
+            }
+        }
+
         function onReady() {
             const res0 = h3.getRes0Indexes();
             let res2 = [];
@@ -95,7 +163,11 @@
                 res2.push(res2_cells);
             }
             res2 = res2.flat();
+            // viewer.entities.suspendEvents();
+            viewer.entities.removeAll();
             renderCells(res2);
+            // viewer.entities.resumeEvents();
+            scene.requestRender();
         }
 
         let scene = viewer.scene;
@@ -105,24 +177,33 @@
         if (!scene.pickPositionSupported) {
             window.alert("This browser does not support pickPosition.");
         }
+        // Remove the default doubleclick action so we can put ours in
+        viewer.screenSpaceEventHandler.removeInputAction(Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
         let handler = new Cesium.ScreenSpaceEventHandler(scene.canvas);
         handler.setInputAction(movement => {
-            // console.log(movement);
-        }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+            viewer.entities.suspendEvents();
+            renderSubHexes(movement);
+            viewer.entities.resumeEvents();
+            scene.requestRender();
+        }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
 
         let coverage = {};
-        fetch("./h3_4_cov_op.txt")
-            .then(resp => {
-                resp.text().then(text => {
-                    lines = text.split('\n')
-                    for (line of lines) {
-                        [idx, val] = line.split(',');
-                        coverage[idx] = parseInt(val, 10);
-                    }
-                    onReady();
-                });
-            })
-            .catch(reason => console.error("error" + reason));
+        function loadDataset(angle) {
+            fetch(`./h3_4_cov_op_${angle}.bin`)
+                .then(resp => {
+                    resp.arrayBuffer().then(buffer => {
+                        coverage = {};
+                        let arr = new Uint32Array(buffer);
+                        for (var i = 0; i < arr.length - 1; i += 2) {
+                            coverage[`${arr[i].toString(16)}ffffffff`] = arr[i + 1];
+                        }
+                        zoomedCell = {};
+                        onReady();
+                    });
+                })
+                .catch(reason => console.error("error" + reason));
+        }
+        loadDataset(document.getElementById('minAngleSelect').value);
     </script>
     <div class="description">
         <p>This renders the percentage of the day that a portion of the earth is covered by a Starlink satellite. (Red
@@ -142,7 +223,17 @@
             <li>6-20-20 - Removed satellites that had low altitudes because they are not believed to be in operational
                 orbits.</li>
             <li>6-21-20 - Fixed remaining issues with calculations at the antimerdian.</li>
+            <li>7-31-20 - <ul>
+                    <li>Added a double-click option to view higher resolution data. Double-click again to revert.</li>
+                    <li>Added a 25 minimum degree dataset</li>
+                    <li>Use gold star to mark cells with 100% uptime</li>
+                    <li>Switched to new format and explicit rendering</li>
+                </ul>
+            </li>
         </ul>
+        <p>
+            Star image: Yakiv Gluck / CC BY-SA (https://creativecommons.org/licenses/by-sa/3.0)
+        </p>
     </div>
 </body>
 

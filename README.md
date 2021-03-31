@@ -44,7 +44,7 @@ track the whole Earth. Each cell covers 324.29km^2 on average.
 For temporal resolution:
 These satellites move across a location quite quickly, using a website like https://findstarlink.com
 we can find that a whole "train" of Starlink satellites crosses a locations view in about 4 or 5 minutes
-so our temporal resolution needs to be a minute if not faster if we want accurate results. 
+so our temporal resolution needs to be a minute if not faster if we want accurate results.
 
 ## S2 based approach
 The original implementation has lots of gross properties and requires dealing with many projections.
@@ -58,7 +58,7 @@ for each time step:
             increment counter
 ```
 
-This means we only have to iterate over ~2000 (+/-600?) cells per satellite instead of ~2 million 
+This means we only have to iterate over ~2000 (+/-600?) cells per satellite instead of ~2 million
 points each. However, this approach seems too slow. Comptuing all the covering cells of each satellite
 takes about 90s on a single core in Python. While this could be parallelized, I think maybe there
 are even smarter approaches to consider. Could we maybe just store S2Cap objects and test points
@@ -70,7 +70,7 @@ globe and not oversample at the poles or undersample at the equator.
 
 ## S2, more like 2Slow... An H3 approach
 So S2 was just being way to slow to return cells for a given covering. (90s to simulate one timestep)
-Now I have to make some guesses about projections for H3 and but it is ~4.5 times faster to simulate 
+Now I have to make some guesses about projections for H3 and but it is ~4.5 times faster to simulate
 a timestep than S2 (now takes 20 seconds on my machine). I'm gonna proceed with the H3 approach for
 now.
 

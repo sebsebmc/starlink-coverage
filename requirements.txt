@@ -10,4 +10,4 @@ pyproj==3.0.1
 requests==2.25
 # cartopy can't be installed in the same pip command as numpy
 # see https://github.com/SciTools/cartopy/issues/1626
-# cartopy==0.18
+cartopy==0.19.0.post1

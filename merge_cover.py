@@ -3,13 +3,20 @@
 from collections import defaultdict
 from typing import Dict
 import struct
+import sys
+
+totalprocess = 16
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        totalprocess: int = int(sys.argv[1])
 
 coverage: Dict[str, int] = {}
 with open(f"h3_4_index.txt", "r") as fd:
     lines = fd.readlines()
     coverage = {line.strip(): 0 for line in lines}
 print(len(coverage))
-for i in range(4):
+for i in range(totalprocess):
     with open(f"h3_4_cov_{i}.txt", "r") as fd:
         lines = fd.readlines()
         for line in lines:

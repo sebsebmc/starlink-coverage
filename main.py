@@ -78,8 +78,8 @@ def filter_sats(sats: List) -> List:
               op_sats.append(sat)
             else:
               print(f"Bad Name or Alt:{sat.name}: {satinfo}")
-        else:
-            print(f"Bad Perigee:{sat.name}: {satinfo}")
+        #else:
+        #    print(f"Bad Perigee:{sat.name}: {satinfo}")
               
 
     return op_sats
@@ -256,7 +256,7 @@ if __name__ == "__main__":
         coverage_set: Set[str] = set()
         for sat_name, sat in subpoints.items():
             if sat.elevation.km < 300 or "STARLINK" not in sat_name or "DEAD" in sat_name or math.isnan(sat.elevation.km):
-              print(f"Bad:{sat_name}: {sat}")
+              #print(f"Bad:{sat_name}: {sat}")
               continue
             #print(f"Good:{sat_name}: {sat}")
             angle = calcCapAngle(sat.elevation.km, MIN_TERMINAL_ANGLE_DEG)

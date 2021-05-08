@@ -54,14 +54,16 @@ def filter_sats(sats: List) -> List:
     """From https://www.space-track.org/documentation#faq filter to our best
     understanding of what the operational satellites are"""
     op_sats: List = []
-    failures_url = "https://docs.google.com/spreadsheets/d/1mTPX5JSkeaoViGT_1wigrjwjzIVkpzI3xhFpEm909oM/gviz/tq?gid=71799984&tqx=out:csv"
-    r = requests.get(failures_url)
+    #failures_url = "https://docs.google.com/spreadsheets/d/1mTPX5JSkeaoViGT_1wigrjwjzIVkpzI3xhFpEm909oM/gviz/tq?gid=71799984&tqx=out:csv"
+    #r = requests.get(failures_url)
     nonoperational = set()
-    for row in csv.DictReader(r.iter_lines(decode_unicode=True)):
-        name = row['NAME'].strip()
-        event_date = datetime.strptime(row['DATE'], "%m/%d/%Y").date()
-        event = row['EVENT'].strip()
-        nonoperational.add(name)
+    #for row in csv.DictReader(r.iter_lines(decode_unicode=True)):
+    #    name = row['NAME'].strip()
+    #    event_date = datetime.strptime(row['DATE'], "%m/%d/%Y").date()
+    #    event = row['EVENT'].strip()
+    #    nonoperational.add(name)
+    ts = api.load.timescale()
+    now = ts.now()
     for sat in sats:
         n = (sat.model.no_kozai / (2 * math.pi)) * 1440
         e = sat.model.ecco
@@ -70,8 +72,15 @@ def filter_sats(sats: List) -> List:
         a = (mu/(n*2*math.pi/(24*3600)) ** 2) ** (1./3.)  # semi-major axis
         # Using semi-major axis "a", eccentricity "e", and the Earth's radius in km,
         perigee = (a * (1 - e)) - 6378.135
+        satinfo = sat.at(now).subpoint()
         if perigee > 540 and sat.name not in nonoperational:
-            op_sats.append(sat)
+            if satinfo.elevation.km > 300 and "STARLINK" in sat.name and "DEAD" not in sat.name and not math.isnan(satinfo.elevation.km):
+              op_sats.append(sat)
+            else:
+              print(f"Bad Name or Alt:{sat.name}: {satinfo}")
+        #else:
+        #    print(f"Bad Perigee:{sat.name}: {satinfo}")
+              
 
     return op_sats
 
@@ -82,7 +91,6 @@ def calcAreaSpherical(altitude: float, term_angle: float) -> float:
     minimum terminal angle (elevation angle)
     """
     epsilon = to_rads(term_angle)
-
     eta_FOV = math.asin((math.sin(epsilon + RIGHT_ANGLE)
                          * R_MEAN) / (R_MEAN + altitude))
 
@@ -95,8 +103,9 @@ def calcAreaSpherical(altitude: float, term_angle: float) -> float:
 
 def calcCapAngle(altitude: float, term_angle: float) -> float:
     """Returns the cap angle (lambda_FOV/2) in radians"""
+    #print(f"alt:{altitude}")
     epsilon = to_rads(term_angle)
-
+    #print(f"sin:{math.sin(epsilon + RIGHT_ANGLE)}")
     eta_FOV = math.asin((math.sin(epsilon + RIGHT_ANGLE)
                          * R_MEAN) / (R_MEAN + altitude))
 
@@ -205,11 +214,12 @@ now = ts.now()
 
 subpoints = {sat.name: sat.at(now).subpoint() for sat in op_sats}
 
-sat1 = subpoints['STARLINK-1284']
-angle = calcCapAngle(sat1.elevation.km, 35)
+#sat1 = subpoints['STARLINK-1284']
+#angle = calcCapAngle(sat1.elevation.km, 35)
+
 
 coverage: DefaultDict[str, int] = defaultdict(int)
-
+satsum: DefaultDict[str, int] = defaultdict(int)
 
 def readTokens():
     with open('cell_ids.txt', 'r') as fd:
@@ -226,23 +236,30 @@ def readH3Indices() -> List[str]:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
+    if len(sys.argv) > 2:
         process: int = int(sys.argv[1])
+        totalprocess: int = int(sys.argv[2])
     else:
         process = 0
-    if len(sys.argv) > 2:
-        MIN_TERMINAL_ANGLE_DEG = int(sys.argv[2])
+        totalprocess: 1
+    if len(sys.argv) > 3:
+        MIN_TERMINAL_ANGLE_DEG = int(sys.argv[3])
 
-    TIME_PER_PROCESS = 1440 // 4  # 360 minutes, a quarter of a day
+    TIME_PER_PROCESS = 1440 // totalprocess  # 360 minutes, a quarter of a day
     START_TIME = process * TIME_PER_PROCESS
     # Consider swapping the loop to be sats then time for cache reasons?
+    nowpythonutc = datetime.utcnow()
     for i in range(TIME_PER_PROCESS):
-        time = ts.utc(2020, 7, 25, 0, START_TIME+i, 0)
+        time = ts.utc(nowpythonutc.year, nowpythonutc.month, nowpythonutc.day, 0, START_TIME+i, 0)
         if i % 30 == 0:
             print(time.utc_iso())
         subpoints = {sat.name: sat.at(time).subpoint() for sat in op_sats}
         coverage_set: Set[str] = set()
         for sat_name, sat in subpoints.items():
+            if sat.elevation.km < 300 or "STARLINK" not in sat_name or "DEAD" in sat_name or math.isnan(sat.elevation.km):
+              #print(f"Bad:{sat_name}: {sat}")
+              continue
+            #print(f"Good:{sat_name}: {sat}")
             angle = calcCapAngle(sat.elevation.km, MIN_TERMINAL_ANGLE_DEG)
             cells = get_cell_ids_h3(sat.latitude.degrees,
                                     sat.longitude.degrees, angle)
@@ -250,9 +267,10 @@ if __name__ == "__main__":
                 Exception("empty region returned")
             for cell in cells:
                 coverage_set.add(cell)
+                satsum[cell] += 1
         for cell in coverage_set:
             coverage[cell] += 1
 
     with open(f"h3_{H3_RESOLUTION_LEVEL}_cov_{process}.txt", "w") as fd:
         for cell, cov in coverage.items():
-            fd.write(f"{cell},{cov}\n")
+            fd.write(f"{cell},{cov},{satsum[cell]}\n")

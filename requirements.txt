@@ -1,0 +1,13 @@
+skyfield==1.37
+numpy==1.20
+geog==0.0.2
+h3==3.7.2
+s2sphere==0.2.5
+shapely==1.7.1
+matplotlib==3.4.1
+geos==0.2.3
+pyproj==3.0.1
+requests==2.25
+# cartopy can't be installed in the same pip command as numpy
+# see https://github.com/SciTools/cartopy/issues/1626
+cartopy==0.19.0.post1

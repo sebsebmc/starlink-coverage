@@ -3,6 +3,17 @@ This pile of scripts grew pretty organically as I was testing and messing around
 organization of a lot of the code. If you want to generate the data yourself I will try and explain what is necessary here.
 
 ## Dependencies
+You need a few deps today:
+```
+apt install -y parallel libgeos-c1v5 libgeos-3.8.0 libgeos-dev proj-data proj-bin libproj15 libproj-dev
+```
+
+## Running
+
+```
+make install-deps
+make generate-coverage
+```
 
 ### Python
 These are the minimal dependencies, any code that uses cartopy can be removed ignored if you're not debugging like I was

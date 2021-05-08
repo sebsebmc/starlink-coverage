@@ -14,6 +14,11 @@
 </head>
 
 <body>
+    <h1>Fork Updates</h1>
+    <p class="description">
+    This particular fork has the data up-to-date as of 5/7/2021 and adds 30 degrees.  It also adds a average number of satellites in the drill down text.  It also possibly is using more sats than are actives as their used to be an exclude list that is not available. 
+    </p>
+    
     <h1>UPDATE:</h1>
     <p class="description">
         I am now providing two different data sets: one that is calculated witha 25 degree minimum user terminal angle
@@ -37,6 +42,7 @@
         <label for="minAngleSelect">Choose a minimum angle to load the dataset:</label>
         <select name="minAngle" id="minAngleSelect" onchange="loadDataset(this.value)">
             <option value="35">35 degrees</option>
+            <option value="30">30 degrees</option>
             <option value="25">25 degrees</option>
         </select>
     </div>
@@ -82,6 +88,20 @@
             }
         }
 
+        function calcSatAverage(cell) {
+            const baseRes = h3.h3GetResolution(cell);
+            if (baseRes > 3) {
+                console.error("Can't calculate at higher resolutions!");
+                return;
+            }
+            const res4_children = h3.h3ToChildren(cell, 4);
+            let total = 0;
+            for (const child of res4_children) {
+                total += satavgdict[child];
+            }
+            return total / res4_children.length;
+        }
+
         function calcAverage(cell) {
             const baseRes = h3.h3GetResolution(cell);
             if (baseRes > 3) {
@@ -101,10 +121,13 @@
                 let bounds = h3.h3ToGeoBoundary(cell, true).flat();
                 const res = h3.h3GetResolution(cell);
                 let avg = 0;
+                let satavg = 0;
                 if (res === 2) {
                     avg = calcAverage(cell);
+                    satavg = calcSatAverage(cell);
                 } else {
                     avg = coverage[cell];
+                    satavg = satavgdict[cell];
                 }
                 let mat;
                 const rgb = colorScale(avg).gl();
@@ -112,7 +135,8 @@
                     id: "" + cell,
                     name: `cell: ${cell.slice(0, -8)}`,
                     description: `This cell is covered on average ${Math.round(avg) | 0} minutes of ${total} for the day. <br/>
-                    This is approximately ${Math.round((avg / total) * 1000) / 10}% of the day.`,
+                    This is approximately ${Math.round((avg / total) * 1000) / 10}% of the day. <br/>
+                    There is about ${satavg} sats overhead on average.`,
                     polygon: {
                         hierarchy: Cesium.Cartesian3.fromDegreesArray(bounds),
                         material: (avg > 1439.9 ? uptimeMaterial : new Cesium.Color(rgb[0], rgb[1], rgb[2], OPACITY)),
@@ -188,14 +212,17 @@
         }, Cesium.ScreenSpaceEventType.LEFT_DOUBLE_CLICK);
 
         let coverage = {};
+        let satavgdict = {};
         function loadDataset(angle) {
             fetch(`./h3_4_cov_op_${angle}.bin`)
                 .then(resp => {
                     resp.arrayBuffer().then(buffer => {
                         coverage = {};
+                        satavgdict = {};
                         let arr = new Uint32Array(buffer);
-                        for (var i = 0; i < arr.length - 1; i += 2) {
+                        for (var i = 0; i < arr.length - 1; i += 3) {
                             coverage[`${arr[i].toString(16)}ffffffff`] = arr[i + 1];
+                            satavgdict[`${arr[i].toString(16)}ffffffff`] = arr[i + 2]/1440;
                         }
                         zoomedCell = {};
                         onReady();

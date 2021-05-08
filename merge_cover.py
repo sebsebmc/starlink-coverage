@@ -12,25 +12,28 @@ if __name__ == "__main__":
         totalprocess: int = int(sys.argv[1])
 
 coverage: Dict[str, int] = {}
+satsum: Dict[str, int] = {}
 with open(f"h3_4_index.txt", "r") as fd:
     lines = fd.readlines()
     coverage = {line.strip(): 0 for line in lines}
+    satsum = {line.strip(): 0 for line in lines}
 print(len(coverage))
 for i in range(totalprocess):
     with open(f"h3_4_cov_{i}.txt", "r") as fd:
         lines = fd.readlines()
         for line in lines:
-            [index, val] = line.strip().split(',')
+            [index, val, sumval] = line.strip().split(',')
             coverage[index] += int(val)
+            satsum[index] += int(sumval)
 
 with open(f"h3_4_cov_full.txt", "w") as fd:
     for idx, val in coverage.items():
-        fd.write(f"{idx},{val}\n")
+        fd.write(f"{idx},{val},{satsum[idx]}\n")
 
 with open(f"h3_4_cov_op.bin", "wb") as fd:
     for idx, val in coverage.items():
         idx_bytes = int(idx[:-8], 16)
-        packed = struct.pack("<II", idx_bytes, int(val))
+        packed = struct.pack("<III", idx_bytes, int(val), int(satsum[idx]))
         fd.write(packed)
 
 ###################Come back to this########################

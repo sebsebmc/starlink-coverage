@@ -10,7 +10,7 @@ mkdir -p archive
 #generate index
 ./gen_h3_index.py
 
-for i in 25 35; do 
+for i in 25 30 35; do 
   echo "Starting $i degrees at `date -Iminutes`"
   seq 0 $((NUMTHREADS-1)) | parallel -j$NUMTHREADS "./main.py {} $NUMTHREADS $i"
   ./merge_cover.py $NUMTHREADS

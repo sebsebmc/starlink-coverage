@@ -217,8 +217,9 @@ subpoints = {sat.name: sat.at(now).subpoint() for sat in op_sats}
 #sat1 = subpoints['STARLINK-1284']
 #angle = calcCapAngle(sat1.elevation.km, 35)
 
-coverage: DefaultDict[str, int] = defaultdict(int)
 
+coverage: DefaultDict[str, int] = defaultdict(int)
+satsum: DefaultDict[str, int] = defaultdict(int)
 
 def readTokens():
     with open('cell_ids.txt', 'r') as fd:
@@ -266,9 +267,10 @@ if __name__ == "__main__":
                 Exception("empty region returned")
             for cell in cells:
                 coverage_set.add(cell)
+                satsum[cell] += 1
         for cell in coverage_set:
             coverage[cell] += 1
 
     with open(f"h3_{H3_RESOLUTION_LEVEL}_cov_{process}.txt", "w") as fd:
         for cell, cov in coverage.items():
-            fd.write(f"{cell},{cov}\n")
+            fd.write(f"{cell},{cov},{satsum[cell]}\n")

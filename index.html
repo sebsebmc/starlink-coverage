@@ -15,6 +15,12 @@
 
 <body>
     <h1>UPDATE:</h1>
+    <h2>THIS PROJECT IS NOT BEING UPDATED</h2>
+    <p class="description">
+        For a much more in-depth simulation check out <a href="https://mikepuchol.com/modeling-starlink-capacity-843b2387f501">https://mikepuchol.com/modeling-starlink-capacity-843b2387f501</a>
+        <br>
+        I am only making changes to this project keep the page working with the historical data.
+    </p>
     <p class="description">
         I am now providing two different data sets: one that is calculated witha 25 degree minimum user terminal angle
         and one with a 35 degree minimum user terminal angle. The more recent SpaceX filings show that they are capable
@@ -36,8 +42,8 @@
     <div id="toolbar">
         <label for="minAngleSelect">Choose a minimum angle to load the dataset:</label>
         <select name="minAngle" id="minAngleSelect" onchange="loadDataset(this.value)">
-            <option value="35">35 degrees</option>
             <option value="25">25 degrees</option>
+            <option value="35">35 degrees</option>
         </select>
     </div>
     <div id="cesiumContainer" class="fullSize"></div>
@@ -64,9 +70,9 @@
         });
 
         function renderHexes() {
-            let cells = h3.polyfill(rect.coordinates, 4, true);
+            let cells = h3.polygonToCells(rect.coordinates, 4, true);
             for (const cell of cells) {
-                let bounds = h3.h3ToGeoBoundary(cell, true).flat();
+                let bounds = h3.cellToBoundary(cell, true).flat();
                 let rgb = colorScale(coverage[cell]).gl();
                 viewer.entities.add({
                     name: cell,
@@ -83,12 +89,12 @@
         }
 
         function calcAverage(cell) {
-            const baseRes = h3.h3GetResolution(cell);
+            const baseRes = h3.getResolution(cell);
             if (baseRes > 3) {
                 console.error("Can't calculate at higher resolutions!");
                 return;
             }
-            const res4_children = h3.h3ToChildren(cell, 4);
+            const res4_children = h3.cellToChildren(cell, 4);
             let total = 0;
             for (const child of res4_children) {
                 total += coverage[child];
@@ -98,8 +104,8 @@
 
         function renderCells(cells) {
             for (const cell of cells) {
-                let bounds = h3.h3ToGeoBoundary(cell, true).flat();
-                const res = h3.h3GetResolution(cell);
+                let bounds = h3.cellToBoundary(cell, true).flat();
+                const res = h3.getResolution(cell);
                 let avg = 0;
                 if (res === 2) {
                     avg = calcAverage(cell);
@@ -137,8 +143,8 @@
             } else {
                 return;
             }
-            cell = h3.geoToH3(lat, long, 2);
-            res4Cells = h3.h3ToChildren(cell, 4);
+            cell = h3.latLngToCell(lat, long, 2);
+            res4Cells = h3.cellToChildren(cell, 4);
             // If we zoomed this cell, revert it
             if (zoomedCell[cell]) {
                 zoomedCell[cell] = undefined;
@@ -156,10 +162,10 @@
         }
 
         function onReady() {
-            const res0 = h3.getRes0Indexes();
+            const res0 = h3.getRes0Cells();
             let res2 = [];
             for (const cell of res0) {
-                res2_cells = h3.h3ToChildren(cell, 2);
+                res2_cells = h3.cellToChildren(cell, 2);
                 res2.push(res2_cells);
             }
             res2 = res2.flat();
